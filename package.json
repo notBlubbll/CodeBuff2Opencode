@@ -1,0 +1,21 @@
+{
+  "name": "codebuff-proxy",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible Codebuff proxy with Anthropic support",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev": "node --watch proxy.js",
+    "start:bun": "bun run proxy.js"
+  },
+  "keywords": [
+    "codebuff",
+    "proxy",
+    "openai",
+    "anthropic",
+    "api"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
