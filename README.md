@@ -2,6 +2,13 @@
 
 OpenAI- and Anthropic-compatible proxy server for [Codebuff](https://codebuff.com), providing access to multiple LLM models through a unified API powered by your Codebuff subscription.
 
+<img width="686" height="707" alt="image" src="https://github.com/user-attachments/assets/099431fa-8e75-4362-b0be-906aa969f3af" />
+
+<img width="653" height="442" alt="image" src="https://github.com/user-attachments/assets/be4a5a3e-64f9-49c1-8ae1-0a0a52ad85cd" />
+
+models:<br>
+<img width="262" height="220" alt="image" src="https://github.com/user-attachments/assets/0c56472a-ce15-4066-aea2-ab217e45da9c" />
+
 ## Features
 
 - **OpenAI-Compatible API** — Standard `/v1/chat/completions` and `/v1/models` endpoints
