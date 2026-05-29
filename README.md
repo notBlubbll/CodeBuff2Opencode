@@ -1,163 +1,57 @@
 # Codebuff2OpenCode Proxy
 
-OpenAI- and Anthropic-compatible proxy server for Freebuff, providing free access to multiple LLM models through a unified API. Translated from the Go implementation [Frebuff2API](https://github.com/Quorinex/Freebuff2API) to Node.js/Bun.
-
-<img width="686" height="707" alt="image" src="https://github.com/user-attachments/assets/099431fa-8e75-4362-b0be-906aa969f3af" />
-
-
-<img width="653" height="442" alt="image" src="https://github.com/user-attachments/assets/be4a5a3e-64f9-49c1-8ae1-0a0a52ad85cd" />
-
-models:<br>
-<img width="262" height="220" alt="image" src="https://github.com/user-attachments/assets/0c56472a-ce15-4066-aea2-ab217e45da9c" />
-
-country detection + bypass:<br>
-<img width="309" height="196" alt="image" src="https://github.com/user-attachments/assets/49dee7f4-41a7-41ca-977e-b7b716d01a84" />
-
+OpenAI- and Anthropic-compatible proxy server for [Codebuff](https://codebuff.com), providing access to multiple LLM models through a unified API powered by your Codebuff subscription.
 
 ## Features
 
 - **OpenAI-Compatible API** — Standard `/v1/chat/completions` and `/v1/models` endpoints
 - **Anthropic API Support** — `/v1/messages` and `/v1/messages/count_tokens` with automatic format conversion
 - **Streaming Support** — SSE streaming for both OpenAI and Anthropic endpoints
-- **Multi-Token Rotation** — Round-robin across multiple auth tokens with automatic CLI token detection
-- **Dynamic Model Registry** — Fetches available models from Freebuff source code on GitHub
-- **Free Session Management** — Automatic session handling with queue/waiting room and model-lock support
-- **Run Chain Management** — Dual run chains (normal + gemini) with automatic finalization
+- **Single API Key Auth** — Uses your Codebuff API key (`cb-pat-*`) — no token rotation or session management needed
 - **Tool Schema Normalization** — Resolves `$ref` and `definitions` in tool schemas before forwarding
-- **Dashboard UI** — Liquid glass effects, Bing wallpaper, OAuth flow, toggleable models
-- **Ad Integration** — Fetches and displays upstream ads in the dashboard
-- **Version Auto-Update** — Tracks Bun, Freebuff CLI, and SDK versions from upstream sources
-- **Auto-Config** — Automatically configures opencode provider on startup
-- **Warp Plus Proxy** — SOCKS5 proxy via Cloudflare WARP for bypassing rate limits on limited-tier sessions
+- **Dashboard UI** — Liquid glass effects, Bing wallpaper, API key status display
+- **Auto-Config** — Automatically configures opencode provider on startup with all available models
 
 ## Available Models
 
-The proxy fetches models from Freebuff's TypeScript source. Current models:
+Codebuff provides access to these models through your subscription:
 
-| Model | Agent ID | Tier | Data Training |
-|-------|----------|------|---------------|
-| `minimax/minimax-m2.7` | `base2-free` | Full | No |
-| `moonshotai/kimi-k2.6` | `base2-free-kimi` | Premium | No |
-| `deepseek/deepseek-v4-pro` | `base2-free-deepseek` | Premium | **Yes** |
-| `deepseek/deepseek-v4-flash` | `base2-free-deepseek-flash` | Limited | **Yes** |
-| `google/gemini-3.1-pro-preview` | *(subagent only)* | — | No |
-
-The first 4 models are user-selectable in the dashboard. `google/gemini-3.1-pro-preview` is used internally as a subagent (gemini-thinker) when using Kimi K2.6 or DeepSeek V4 Pro for deeper reasoning — it is not directly accessible via the API.
-
-Models are toggleable in the dashboard UI.
-
-## Warnings
-
-### Data Collection & Training
-
-**DeepSeek models collect your data for training.** The upstream Freebuff source explicitly marks both `deepseek/deepseek-v4-pro` and `deepseek/deepseek-v4-flash` with the warning: `"Collects data for training"`. This means your prompts, code, and chat content sent through these models may be used by DeepSeek to train their models.
-
-If you are working with sensitive, proprietary, or confidential code, **avoid DeepSeek models**. Use `minimax/minimax-m2.7` or `moonshotai/kimi-k2.6` instead — these do not carry the training data warning.
-
-### What Freebuff/Codebuff Collects
-
-Per their [Privacy Policy](https://codebuff.com/privacy-policy) and [Privacy docs](https://codebuff.com/docs/advanced/privacy):
-
-- **Chat session logs** are stored for debugging and service improvement
-- **Your codebase is not stored** — the server acts as a thin router forwarding requests to model providers
-- **Usage data**: IP address, browser type, device info, page visit duration
-- **Personal data**: email, name (if provided), cookies
-- **Analytics**: Google Analytics, PostHog, advertising cookies
-- **Data location**: transferred to and processed in the **United States**
-- **Ads**: session context and basic profile data are used for ad targeting
-
-They state they do not choose model providers that train on your data in standard modes — **but DeepSeek is an exception** (see above).
-
-### Limited Mode
-
-Freebuff has two access tiers that determine which models you can use:
-
-| Tier | Available Models | Session Limit |
-|------|-----------------|---------------|
-| **Limited** | `deepseek/deepseek-v4-flash` only | 5/day |
-| **Full** | All 4 models | 5/day |
-
-Within the full tier, two models are marked as **premium** and may require additional access:
-- `deepseek/deepseek-v4-pro` (Smartest) — Premium, **collects data for training**
-- `moonshotai/kimi-k2.6` (Balanced) — Premium
-- `minimax/minimax-m2.7` (Fastest) — Non-premium
-- `deepseek/deepseek-v4-flash` (Most efficient) — Non-premium, **collects data for training**
-
-New freebuff users typically start in **limited tier**, which only allows `deepseek/deepseek-v4-flash` — the model that collects data for training. To access all models, you need full tier access.
-
-When the upstream returns a `session_model_mismatch` error (e.g., requesting `minimax/minimax-m2.7` on a limited-tier session), the proxy automatically switches to `deepseek/deepseek-v4-flash` and retries. This is transparent to the client.
-
-For limited-tier sessions, the proxy also attempts to route requests through a **Warp Plus** SOCKS5 proxy (Cloudflare WARP) to bypass rate limits. If Warp Plus fails to start or connect, the proxy falls back to direct connection.
-
-Session limits apply to both tiers:
-- **5 sessions per day** (resets at midnight Pacific time)
-- Sessions enter a **waiting room queue** during high traffic
-- Sessions can be `active`, `queued`, `ended`, `superseded`, or `disabled`
-
-The proxy handles these states automatically — queued sessions are polled until active, and ended/superseded sessions are recreated.
-
-### Supported Countries
-
-Freebuff is available **globally** in 85+ countries. The [live map](https://freebuff.com/live) shows real-time usage. Top countries include:
-
-| Country | Active Users |
-|---------|-------------|
-| India | 119 |
-| United States | 54 |
-| Germany | 29 |
-| Spain | 29 |
-| China | 22 |
-| Indonesia | 19 |
-| United Kingdom | 19 |
-| France | 18 |
-| Vietnam | 15 |
-| Canada | 12 |
-
-The proxy dashboard displays the upstream server's `country_code` (e.g. `DE`) from the session response. Availability may vary by region and time of day.
+| Model | Description |
+|-------|-------------|
+| `anthropic/claude-sonnet-4.5` | Claude Sonnet 4.5 — balanced performance |
+| `anthropic/claude-opus-4.7` | Claude Opus 4.7 — highest quality |
+| `openai/gpt-5.1` | GPT-5.1 — OpenAI flagship |
+| `openai/gpt-5-nano` | GPT-5 Nano — fast and efficient |
+| `google/gemini-3.1-flash-lite` | Gemini 3.1 Flash Lite — Google's lightweight model |
+| `kimi/kimi-k2.6` | Kimi K2.6 — Moonshot AI |
+| `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro — advanced reasoning |
+| `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash — fast inference |
 
 ## Authentication
 
-Freebuff requires authentication via GitHub OAuth. There are **three ways** to get tokens:
+The proxy requires a Codebuff API key. Get one from [codebuff.com/api-keys](https://www.codebuff.com/api-keys).
 
-### Method 1: Freebuff CLI (Recommended)
+### Configuration
 
-```bash
-npm install -g freebuff
-freebuff
-```
-
-The CLI will guide you through GitHub OAuth login. After authentication, tokens are saved to:
-- **Windows**: `C:\Users\<username>\.config\manicode\credentials.json`
-- **Linux/macOS**: `~/.config/manicode/credentials.json`
-
-The proxy automatically detects and loads these tokens on startup.
-
-### Method 2: Dashboard OAuth UI
-
-1. Start the proxy: `node proxy.js`
-2. Open dashboard: `http://localhost:8080`
-3. Click "Generate Auth Token" in the token status section
-4. Click the login URL (opens browser)
-5. Authenticate with GitHub at freebuff.com
-6. Token is automatically added to config via polling
-
-### Method 3: Manual Configuration
-
-1. Visit https://freebuff.llm.pm
-2. Complete GitHub OAuth login
-3. Copy your auth token
-4. Add to `.config/config.json`:
+Add your API key to `.config/config.json`:
 
 ```json
 {
-  "AUTH_TOKENS": ["your-token-here"]
+  "API_KEY": "cb-pat-your-api-key-here"
 }
+```
+
+Or set the environment variable:
+
+```bash
+set CODEBUFF_API_KEY=cb-pat-your-api-key-here
+node proxy.js
 ```
 
 ## Installation
 
 ```bash
-cd FREEBUFF-PROXY
+cd CODEBUFF-PROXY
 npm install
 node proxy.js
 ```
@@ -180,14 +74,12 @@ Edit `.config/config.json` or set environment variables:
 | Key | Description | Default |
 |-----|-------------|---------|
 | `LISTEN_ADDR` | Proxy listen address | `:8080` |
-| `UPSTREAM_BASE_URL` | Freebuff backend URL | `https://www.codebuff.com` |
-| `AUTH_TOKENS` | Freebuff auth tokens (array) | `[]` |
+| `UPSTREAM_BASE_URL` | Codebuff backend URL | `https://www.codebuff.com` |
+| `API_KEY` | Codebuff API key (`cb-pat-*`) | — |
 | `REQUEST_TIMEOUT` | Upstream request timeout | `15m` |
 | `API_KEYS` | Client API keys for proxy auth | `[]` (open access) |
 
-Environment variables override JSON config values.
-
-### Setting Up API Keys
+### Setting Up Proxy API Keys
 
 By default the proxy is open access — any client can connect. To restrict access, set `API_KEYS` in `.config/config.json`:
 
@@ -214,12 +106,6 @@ curl -H "x-api-key: my-secret-key-1" http://localhost:8080/v1/models
 curl -H "Authorization: Bearer my-secret-key-1" http://localhost:8080/v1/models
 ```
 
-Generate a random key:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
 ## Usage
 
 ### OpenAI-Compatible Clients
@@ -235,7 +121,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: 'minimax/minimax-m2.7',
+  model: 'anthropic/claude-sonnet-4.5',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 ```
@@ -256,15 +142,15 @@ const response = await fetch('http://localhost:8080/v1/messages', {
 
 ### opencode Integration
 
-Add the following to your `opencode.json` (located at `~/.config/opencode/opencode.json` or `./opencode.json`):
+The proxy automatically configures opencode on startup. Your `opencode.json` (at `~/.opencode/opencode.json`) will include:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "freebuff": {
+    "codebuff": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Freebuff Proxy",
+      "name": "Codebuff Proxy",
       "options": {
         "baseURL": "http://localhost:8080/v1"
       }
@@ -273,20 +159,16 @@ Add the following to your `opencode.json` (located at `~/.config/opencode/openco
 }
 ```
 
-Restart opencode after editing the config file.
+Restart opencode after starting the proxy.
 
 ## Dashboard
 
 Access the dashboard at `http://localhost:8080`:
 
+- **API Key Status** — Shows connection status and authenticated user email
 - **Liquid Glass Effects** — SVG displacement maps with canvas-generated refraction profiles
 - **Bing Wallpaper** — Daily rotating backgrounds via peapix.com
-- **OAuth Token Generation** — Browser-based authentication with auto-polling
-- **Toggleable Models** — Enable/disable models with checkboxes
-- **Token Status** — View active tokens, sessions, instance IDs, country code, and remaining session time with live countdown
-- **Country Display** — Shows the upstream server's country code (e.g. `DE`) from the session response, with `>US` indicator when Warp Plus proxy is active
-- **Session Countdown** — Live `Xm Ys left` countdown in the Auth Token Status header, updated every second
-- **Ad Integration** — Gravity ad provider with 30s rotation, impression tracking, toggleable display, and localStorage caching
+- **Model List** — View all available models
 - **SS Mode** — Blur tokens for screenshots
 - **Configuration Forms** — Edit listen address, upstream URL, timeouts
 
@@ -296,7 +178,7 @@ Access the dashboard at `http://localhost:8080`:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/healthz` | Health check with token and session status |
+| `GET` | `/healthz` | Health check with API key and user status |
 | `GET` | `/v1/models` | OpenAI models list |
 | `POST` | `/v1/chat/completions` | OpenAI chat completions (streaming supported) |
 | `POST` | `/v1/messages` | Anthropic messages (auto-converted to OpenAI) |
@@ -308,116 +190,46 @@ Access the dashboard at `http://localhost:8080`:
 |--------|------|-------------|
 | `GET` | `/api/config` | Get current configuration |
 | `POST` | `/api/config` | Update configuration |
-| `GET` | `/api/tokens` | List configured tokens (masked) |
-| `POST` | `/api/auth/start` | Start OAuth flow |
-| `POST` | `/api/auth/status` | Check OAuth status (auto-saves token) |
-| `GET` | `/api/models` | List models from registry |
+| `GET` | `/api/validate` | Validate API key |
+| `GET` | `/api/models` | List available models |
 | `GET` | `/api/bg` | Get Bing wallpaper URL |
-| `GET` | `/api/ads` | Fetch upstream ads |
-| `POST` | `/api/ads/impression` | Record ad impression |
 
 ## Architecture
 
 ```
-proxy.js (~1646 lines)
-├── Version Tracking     — Auto-updates Bun/CLI/SDK versions from upstream
-├── Config System        — JSON + env vars + CLI token auto-detection
-├── ModelRegistry        — Parses TypeScript sources from GitHub
-├── UpstreamClient       — HTTP client for Freebuff backend (node-fetch + SOCKS5 support)
-├── TokenPool            — Session management with mutex locking
-├── WarpPlusManager      — SOCKS5 proxy via warp-plus binary for rate limit bypass
-├── Run Chain Helpers    — Normal and Gemini run lifecycle
+proxy.js
+├── Config System        — JSON + env vars + API key validation
+├── UpstreamClient       — HTTP client for Codebuff backend
+├── Run Chain Helpers    — Agent run lifecycle
 ├── Tool Schema Norm.    — $ref resolution and schema normalization
 ├── HTTP Handlers        — OpenAI + Anthropic + management endpoints
-├── OAuth Flow           — Browser-based GitHub authentication
-└── Server Startup       — Validation, prewarm, token reload loop
+├── Opencode Config      — Auto-configures opencode provider
+└── Server Startup       — Validation, config write
 
-dashboard.html (1023 lines)
+dashboard.html
 ├── Liquid Glass Engine  — Canvas-based displacement/specular maps
-├── OAuth UI             — Token generation with polling
-├── Model Manager        — Toggleable model checkboxes
-├── Ad System            — Upstream ads with impression tracking
+├── API Key Status       — Connection and user display
+├── Wallpaper Toggle     — Bing daily backgrounds
 └── Configuration UI     — Settings forms
 ```
 
 ## Startup Flow
 
 1. `loadConfig()` — Load `.config/config.json` + env vars
-2. `loadFreebuffCLITokens()` — Auto-detect CLI tokens from `~/.config/manicode/credentials.json`
-3. `checkAndUpdateVersions()` — Fetch latest versions from upstream sources
-4. `ModelRegistry.start()` — Fetch and parse model definitions from GitHub
-5. `validateAllTokens()` — Verify each token via `createSession()`
-6. `TokenPool` — Initialize with valid tokens
-7. `http.createServer()` — Start HTTP server
-8. `setInterval` — Token reload check every 5 minutes
-9. `setInterval` — Version check every 1 hour
+2. `UpstreamClient` — Initialize HTTP client with API key
+3. `validateApiKey()` — Verify API key via `/api/v1/me`
+4. `setupOpencodeConfig()` — Write/update opencode provider config
+5. `http.createServer()` — Start HTTP server
 
-## Troubleshooting
+## Codebuff Plans
 
-### No Valid Tokens
-
-If you see "No tokens configured":
-- Run `freebuff` CLI to authenticate
-- Use dashboard OAuth UI
-- Manually add token to `.config/config.json`
-
-### Port Already in Use
-
-```bash
-netstat -ano | findstr :8080
-taskkill /PID <pid> /F
-```
-
-Or change port in `.config/config.json`:
-```json
-{
-  "LISTEN_ADDR": ":9000"
-}
-```
-
-### Models Not Showing
-
-Check network connectivity to GitHub:
-- `https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/free-agents.ts`
-- `https://raw.githubusercontent.com/CodebuffAI/codebuff/main/common/src/constants/freebuff-models.ts`
-
-### Syntax Errors
-
-Multiple edits can create duplicate code blocks:
-```bash
-node --check proxy.js
-```
-
-### Warp Plus Issues
-
-If Warp Plus fails to start or the SOCKS5 proxy on port 8086 is not reachable:
-- The proxy automatically falls back to direct connection
-- Check if another process is using port 8086
-- The `warp-plus.exe` binary is downloaded automatically on first use
-- The last working WARP endpoint (IP:port) is cached and reused on restart; if connectivity fails, the cache is cleared and a new endpoint is fetched
-
-### Model Lock Errors
-
-If you see `session_model_mismatch` errors:
-- Your session is in **limited tier** — only `deepseek/deepseek-v4-flash` is available
-- The proxy automatically switches to this model and retries
-- No user action needed — this is handled transparently
+Codebuff offers subscription-based access. See [codebuff.com/pricing](https://www.codebuff.com/pricing) for current plans and pricing.
 
 ## Dependencies
 
-- `freebuff` (^0.0.96) — CLI token detection
-- `node-forge` (^1.4.0) — Cryptographic operations
-- `node-fetch` (^2.7.0) — HTTP client with SOCKS5 proxy support
-- `socks-proxy-agent` (^8.0.0) — SOCKS5 proxy agent for Warp Plus
+No external dependencies — uses Node.js built-in modules only.
 
 Plus Node.js built-ins: `fs`, `path`, `os`, `http`, `https`, `url`, `crypto`.
-
-## Credits
-
-- Inspired by [freebuff-proxy](https://github.com/ferdiunal/freebuff-proxy) by ferdiunal
-- Original Go implementation: [Frebuff2API](https://github.com/Quorinex/Freebuff2API) by Quorinex
-- Freebuff and Codebuff for the backend API
-- [freebuff2api_rs](https://github.com/XxxXTeam/freebuff2api_rs) for version tracking
 
 ## License
 
